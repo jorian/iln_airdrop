@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::thread::sleep;
 use std::time::Duration;
+use komodo_rpc_client::arguments::address::Address;
 
 fn main() {
     let client = Client::new_assetchain_client(&Chain::Custom(String::from("MORTY")))
@@ -29,21 +30,31 @@ fn main() {
     }
 }
 
-fn read_addresses_file(addresses: &Path) -> io::Result<Vec<String>>  {
+fn read_addresses_file(addresses: &Path) -> io::Result<Vec<Address>>  {
     let file = File::open(addresses)?;
     let reader = BufReader::new(file);
 
-    Ok(reader
+    let mut vec = vec![];
+
+    reader
         .lines()
-        .filter_map(Result::ok) // TODO make sure this is a valid address
-        .collect::<Vec<String>>())
+        .for_each(|line| {
+            let str_add = line.unwrap();
+            match Address::from(&str_add) {
+                Ok(address) => vec.push(address),
+                Err(err) => {
+                    println!("error parsing address {}: {}", &str_add, err.to_string());
+                }
+            }
+        });
+
+    Ok(vec)
 }
 
-fn create_and_send(client: &Client, chunk: &[String], amount: f64) -> TransactionId {
+fn create_and_send(client: &Client, chunk: &[Address], amount: f64) -> TransactionId {
     let mut sendmany = komodo_rpc_client::arguments::SendManyAmounts::new();
     for addy in chunk {
-        let address = komodo_rpc_client::arguments::address::Address::from(addy).unwrap();
-        sendmany.add(&address.to_string(), amount);
+        sendmany.add(&addy.to_string(), amount);
     }
 
     let tx = client.send_many(sendmany, None, None, None);
@@ -55,6 +66,7 @@ fn create_and_send(client: &Client, chunk: &[String], amount: f64) -> Transactio
 mod tests {
     use std::path::Path;
     use crate::read_addresses_file;
+    use komodo_rpc_client::arguments::address::Address;
 
     #[test]
     fn it_works() {
@@ -67,19 +79,11 @@ mod tests {
         let vec = read_addresses_file(path);
 
         let valid_addresses = vec!{
-            String::from("RAMVr4wrArBMM4j1J5gmCTiE5zvpBR9L3V"),
-            String::from("RHQt6RRAKgzdvZxSPH5CxLNC9zmaN7ARvC"),
-            String::from("RVFh5H8HuaBvAYVngoSoYPijjUvpXjsq1e")
+            Address::from("RAMVr4wrArBMM4j1J5gmCTiE5zvpBR9L3V").unwrap(),
+            Address::from("RHQt6RRAKgzdvZxSPH5CxLNC9zmaN7ARvC").unwrap(),
+            Address::from("RVFh5H8HuaBvAYVngoSoYPijjUvpXjsq1e").unwrap()
         };
 
         assert_eq!(valid_addresses, vec.unwrap());
-    }
-
-    #[test]
-    fn invalid_addresses() {
-        let path = Path::new("data/test_invalid.txt");
-        let vec = read_addresses_file(path);
-
-        assert!(vec.is_err());
     }
 }
