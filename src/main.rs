@@ -4,7 +4,10 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::thread::sleep;
 use std::time::Duration;
-use komodo_rpc_client::arguments::address::Address;
+use komodo_rpc_client::arguments::{
+    address::Address,
+    SendManyAmounts
+};
 
 fn main() {
     let client = Client::new_assetchain_client(&Chain::Custom(String::from("MORTY")))
@@ -12,7 +15,7 @@ fn main() {
     let file_name = Path::new("data/08-0.50.txt");
     let amount = 0.012;
 
-    if let Ok(vec) = read_addresses_file(file_name) {
+    if let Ok(vec) = read_addresses_from_file(file_name) {
         for chunk in vec.chunks(777) {
             let txid = create_and_send(&client, chunk, amount);
             let mut raw_tx = client.get_raw_transaction_verbose(TransactionId::from_hex(&txid.be_hex_string()).unwrap());
@@ -27,10 +30,12 @@ fn main() {
                 sleep(Duration::from_secs(2));
             }
         }
+    } else {
+        println!{"Something went wrong while reading the file"}
     }
 }
 
-fn read_addresses_file(addresses: &Path) -> io::Result<Vec<Address>>  {
+fn read_addresses_from_file(addresses: &Path) -> io::Result<Vec<Address>>  {
     let file = File::open(addresses)?;
     let reader = BufReader::new(file);
 
@@ -42,9 +47,7 @@ fn read_addresses_file(addresses: &Path) -> io::Result<Vec<Address>>  {
             let str_add = line.unwrap();
             match Address::from(&str_add) {
                 Ok(address) => vec.push(address),
-                Err(err) => {
-                    println!("error parsing address {}: {}", &str_add, err.to_string());
-                }
+                Err(err) => println!("error parsing address {}: {}", &str_add, err.to_string())
             }
         });
 
@@ -52,7 +55,7 @@ fn read_addresses_file(addresses: &Path) -> io::Result<Vec<Address>>  {
 }
 
 fn create_and_send(client: &Client, chunk: &[Address], amount: f64) -> TransactionId {
-    let mut sendmany = komodo_rpc_client::arguments::SendManyAmounts::new();
+    let mut sendmany = SendManyAmounts::new();
     for addy in chunk {
         sendmany.add(&addy.to_string(), amount);
     }
@@ -65,7 +68,7 @@ fn create_and_send(client: &Client, chunk: &[Address], amount: f64) -> Transacti
 #[cfg(test)]
 mod tests {
     use std::path::Path;
-    use crate::read_addresses_file;
+    use crate::read_addresses_from_file;
     use komodo_rpc_client::arguments::address::Address;
 
     #[test]
@@ -76,7 +79,7 @@ mod tests {
     #[test]
     fn valid_addresses() {
         let path = Path::new("data/test_valid.txt");
-        let vec = read_addresses_file(path);
+        let vec = read_addresses_from_file(path);
 
         let valid_addresses = vec!{
             Address::from("RAMVr4wrArBMM4j1J5gmCTiE5zvpBR9L3V").unwrap(),
